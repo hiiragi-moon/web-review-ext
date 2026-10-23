@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>レビュー結果</title>
+  <link rel="stylesheet" href="report.css">
+  <style id="page-size"></style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="download">PDFをダウンロード</button>
+    <button id="print" class="sub">印刷画面で保存</button>
+    <div class="layout">
+      修正箇所を
+      <label><input type="radio" name="layout" value="side" checked> 横に</label>
+      <label><input type="radio" name="layout" value="below"> 下に</label>
+    </div>
+    <span id="status"></span>
+  </div>
+  <main id="sheet">
+    <header>
+      <h1 id="title">レビュー結果</h1>
+      <div id="meta"></div>
+    </header>
+    <div class="cols">
+      <section class="page">
+        <h2>レビュー対象</h2>
+        <img id="shot" alt="">
+      </section>
+      <section class="notes">
+        <h2>修正箇所</h2>
+        <ol id="items"></ol>
+      </section>
+    </div>
+  </main>
+  <script src="report.js"></script>
+</body>
+</html>

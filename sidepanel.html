@@ -7,8 +7,13 @@
 </head>
 <body>
   <header>
-    <input id="author" placeholder="あなたの名前">
-    <button id="pick" class="primary">＋ 要素を選んでコメント</button>
+    <div class="viewbar">
+      <button id="toBottom" class="side-only" title="ページの下部に表示する">⬇ 下に表示</button>
+      <button id="toSide" class="dock-only" title="サイドパネルに戻す">➡ 横に戻す</button>
+      <button id="closeDock" class="dock-only" title="下パネルを閉じる">✕ 閉じる</button>
+    </div>
+    <input id="author" placeholder="レビュワーネーム">
+    <button id="pick" class="primary">＋ 要素・文字を選んでコメント</button>
     <div id="notice" hidden></div>
   </header>
 
@@ -25,11 +30,15 @@
     <label><input type="checkbox" id="showDone"> 解決済みも表示</label>
     <span id="count"></span>
   </div>
+  <div id="splitter" class="dock-only" title="ドラッグで幅を変更"></div>
   <ul id="list"></ul>
 
   <footer>
-    <button id="copy">Markdownでコピー</button>
-    <button id="json">JSON保存</button>
+    <div class="label">レビュー結果を出力</div>
+    <div class="row">
+      <button id="json">JSON出力</button>
+      <button id="pdf">PDF出力</button>
+    </div>
   </footer>
 
   <script src="sidepanel.js"></script>

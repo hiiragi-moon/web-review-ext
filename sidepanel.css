@@ -17,21 +17,72 @@ button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
 button.primary:hover { background: #1d4ed8; }
 button.picking { background: #f59e0b; border-color: #f59e0b; }
 #notice { color: #b45309; font-size: 12px; }
-#target { font-size: 11px; color: #6b7280; margin-bottom: 6px; word-break: break-all; }
+#target {
+  margin: 2px 0 8px; padding: 6px 8px; background: #fef9c3; border-left: 3px solid #eab308;
+  font-size: 12px; word-break: break-all; max-height: 6em; overflow-y: auto;
+}
 .row { display: flex; gap: 6px; margin-top: 6px; }
 #filter { display: flex; justify-content: space-between; color: #6b7280; font-size: 12px; }
 #list { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
-#list li { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer; }
-#list li:hover { background: #f9fafb; }
-#list li.done { opacity: .55; }
+#list li.item { display: flex; border-bottom: 1px solid #f3f4f6; cursor: pointer; }
+#list li .content { flex: 1; min-width: 0; padding: 10px 12px 10px 4px; }
+#list li.item:hover { background: #f9fafb; }
 .meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b7280; }
 .num {
   display: inline-block; min-width: 20px; height: 20px; line-height: 20px; text-align: center;
   border-radius: 10px; background: #dc2626; color: #fff; font-weight: bold;
 }
 li.done .num { background: #16a34a; }
-.sel { font: 11px ui-monospace, monospace; color: #6b7280; word-break: break-all; margin: 2px 0; }
+.quote { margin: 6px 0; padding: 4px 6px; background: #fef9c3; border-left: 3px solid #eab308; font-size: 12px; word-break: break-all; }
+.has-image img { display: block; max-width: 100%; max-height: 120px; object-fit: contain; }
 .body { white-space: pre-wrap; margin: 4px 0; }
 .actions { display: flex; gap: 6px; }
 .actions button { padding: 2px 8px; font-size: 12px; }
-footer { display: flex; gap: 6px; border-top: 1px solid #e5e7eb; border-bottom: 0; }
+footer { border-top: 1px solid #e5e7eb; border-bottom: 0; }
+footer .label { font-size: 14px; font-weight: bold; }
+footer .row { margin-top: 6px; }
+footer .row button { flex: 1; }
+.grip {
+  flex: 0 0 18px; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold; color: #9ca3af; cursor: grab; letter-spacing: -2px; user-select: none;
+}
+#list li.item:hover .grip { color: #2563eb; background: #eff6ff; }
+#list li.dragging { opacity: .35; outline: 2px dashed #9ca3af; outline-offset: -2px; }
+#list li.drop-line {
+  height: 3px; margin: -1px 8px -2px; border-radius: 2px; background: #2563eb;
+  box-shadow: 0 0 6px 1px rgba(37, 99, 235, .6); pointer-events: none;
+}
+button:disabled { opacity: .6; cursor: default; }
+#target.has-image { max-height: none; }
+.edit { margin: 4px 0; }
+/* 解決コメント(解決済みのみ) */
+.resolution { margin: 6px 0; padding: 4px 6px; background: #f0fdf4; border-left: 3px solid #16a34a; white-space: pre-wrap; font-size: 12px; }
+.resolution::before { content: "解決: "; font-weight: bold; color: #15803d; }
+.resolution-edit textarea { border-color: #16a34a; }
+.edit textarea { width: 100%; padding: 6px 8px; border: 1px solid #2563eb; border-radius: 6px; font: inherit; resize: vertical; }
+
+/* ---- 表示場所の切り替えボタン ---- */
+.viewbar { display: flex; justify-content: flex-end; gap: 6px; }
+.viewbar button { padding: 2px 8px; font-size: 12px; color: #4b5563; }
+body.dock .side-only, body:not(.dock) .dock-only { display: none; }
+
+/* ---- 下パネル: 左に操作、右にレビュー項目を横並び ---- */
+body.dock {
+  --left: 420px;
+  display: grid; grid-template-columns: var(--left) 6px 1fr; grid-template-rows: auto auto auto 1fr auto;
+  height: 100vh; overflow: hidden;
+}
+body.dock > header { grid-column: 1; grid-row: 1; }
+body.dock > #form { grid-column: 1; grid-row: 2; }
+body.dock > #filter { grid-column: 1; grid-row: 3; }
+body.dock > footer { grid-column: 1; grid-row: 5; }
+body.dock > #list { grid-column: 3; grid-row: 1 / -1; display: flex; overflow-x: auto; overflow-y: hidden; }
+/* 左右の境目(ドラッグで幅を変える) */
+body.dock > #splitter {
+  grid-column: 2; grid-row: 1 / -1; cursor: ew-resize; background: #f3f4f6;
+  border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;
+}
+body.dock > #splitter:hover, body.dock > #splitter.on { background: #93c5fd; }
+body.dock #list li.item { flex: 0 0 280px; border-bottom: 0; border-right: 1px solid #f3f4f6; overflow-y: auto; }
+body.dock #list li.drop-line { flex: 0 0 3px; height: auto; margin: 8px -2px 8px -1px; }
+body.dock #form textarea { height: 64px; }

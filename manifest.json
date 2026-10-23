@@ -1,18 +1,65 @@
 {
   "manifest_version": 3,
   "name": "Staging Review Comments",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "ステージングサイト上の要素を選んでコメントできるレビュー用拡張",
-  "permissions": ["sidePanel", "storage", "tabs"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "side_panel": { "default_path": "sidepanel.html" },
-  "action": { "default_title": "レビューコメントを開く" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "レビューコメントを開く",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "start-pick": {
+      "suggested_key": {
+        "default": "Alt+C",
+        "mac": "Alt+C"
+      },
+      "description": "要素・文字を選んでコメント"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sidepanel.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

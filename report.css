@@ -1,0 +1,45 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 16px; color: #1f2937; background: #fff;
+  font: 12px/1.6 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: #6b7280; }
+.toolbar button {
+  padding: 6px 12px; border: 1px solid #2563eb; border-radius: 6px;
+  background: #2563eb; color: #fff; cursor: pointer; font: inherit;
+}
+.toolbar button.sub { background: #fff; color: #2563eb; }
+.toolbar button:disabled { opacity: .6; cursor: default; }
+.toolbar .layout { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-left: 1px solid #e5e7eb; color: #1f2937; }
+.toolbar .layout label { display: flex; align-items: center; gap: 2px; cursor: pointer; }
+#sheet { width: 1200px; padding: 24px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 13px; margin: 0 0 8px; padding-bottom: 4px; border-bottom: 2px solid #1f2937; }
+#meta { color: #6b7280; font-size: 11px; word-break: break-all; margin-bottom: 16px; white-space: pre-line; }
+.cols { display: grid; grid-template-columns: 62% 1fr; gap: 20px; align-items: start; }
+#shot { display: block; width: 100%; border: 1px solid #d1d5db; }
+#items { list-style: none; margin: 0; padding: 0; position: relative; }
+#items li { position: absolute; left: 0; right: 0; padding: 8px 10px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; }
+.head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #6b7280; }
+.num {
+  display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center;
+  border-radius: 11px; background: #dc2626; color: #fff; font-weight: bold;
+}
+.status { margin-left: auto; }
+li.done .num { background: #16a34a; }
+.target { margin: 6px 0; padding: 4px 8px; background: #fef9c3; border-left: 3px solid #eab308; word-break: break-all; }
+.target img { display: block; max-width: 100%; max-height: 160px; object-fit: contain; }
+.missing { font-size: 11px; color: #9ca3af; }
+.resolution { margin-top: 6px; padding: 4px 8px; background: #f0fdf4; border-left: 3px solid #16a34a; white-space: pre-wrap; }
+.resolution::before { content: "解決: "; font-weight: bold; color: #15803d; }
+.comment { white-space: pre-wrap; font-size: 13px; }
+/* 「下に」配置: 図をページ幅いっぱいにし、その下に修正箇所を番号順に横に並べる */
+#sheet.below .cols { grid-template-columns: 1fr; }
+#sheet.below #items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; height: auto !important; }
+#sheet.below #items li { position: static; }
+
+@media print {
+  body { padding: 0; }
+  .toolbar { display: none; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
