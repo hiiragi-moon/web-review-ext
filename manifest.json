@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Staging Review Comments",
+  "version": "0.1.0",
+  "description": "ステージングサイト上の要素を選んでコメントできるレビュー用拡張",
+  "permissions": ["sidePanel", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "レビューコメントを開く" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

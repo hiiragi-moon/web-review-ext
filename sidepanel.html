@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <input id="author" placeholder="あなたの名前">
+    <button id="pick" class="primary">＋ 要素を選んでコメント</button>
+    <div id="notice" hidden></div>
+  </header>
+
+  <section id="form" hidden>
+    <div id="target"></div>
+    <textarea id="text" rows="4" placeholder="コメントを入力"></textarea>
+    <div class="row">
+      <button id="save" class="primary">保存</button>
+      <button id="cancel">キャンセル</button>
+    </div>
+  </section>
+
+  <div id="filter">
+    <label><input type="checkbox" id="showDone"> 解決済みも表示</label>
+    <span id="count"></span>
+  </div>
+  <ul id="list"></ul>
+
+  <footer>
+    <button id="copy">Markdownでコピー</button>
+    <button id="json">JSON保存</button>
+  </footer>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
