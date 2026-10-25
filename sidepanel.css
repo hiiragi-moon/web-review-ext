@@ -67,15 +67,15 @@ button:disabled { opacity: .6; cursor: default; }
 body.dock .side-only, body:not(.dock) .dock-only { display: none; }
 
 /* ---- 下パネル: 左に操作、右にレビュー項目を横並び ---- */
+/* #controls はサイドパネルでは枠を持たず、下パネルでは高さが足りないときにスクロールする */
+#controls { display: contents; }
 body.dock {
   --left: 420px;
-  display: grid; grid-template-columns: var(--left) 6px 1fr; grid-template-rows: auto auto auto 1fr auto;
+  display: grid; grid-template-columns: var(--left) 6px 1fr; grid-template-rows: 1fr auto;
   height: 100vh; overflow: hidden;
 }
-body.dock > header { grid-column: 1; grid-row: 1; }
-body.dock > #form { grid-column: 1; grid-row: 2; }
-body.dock > #filter { grid-column: 1; grid-row: 3; }
-body.dock > footer { grid-column: 1; grid-row: 5; }
+body.dock > #controls { display: block; grid-column: 1; grid-row: 1; min-height: 0; overflow-y: auto; }
+body.dock > footer { grid-column: 1; grid-row: 2; }
 body.dock > #list { grid-column: 3; grid-row: 1 / -1; display: flex; overflow-x: auto; overflow-y: hidden; }
 /* 左右の境目(ドラッグで幅を変える) */
 body.dock > #splitter {

@@ -22,6 +22,13 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (!docked.has(tab.id)) chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
 });
 
+// 割り当て中のショートカットを返す(下パネルの iframe では chrome.commands が使えないため)
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg.type !== "get-shortcut") return;
+  chrome.commands.getAll((cmds) => reply((cmds.find((x) => x.name === "start-pick") || {}).shortcut || ""));
+  return true;
+});
+
 // ページ側から、このタブで下パネルを出すかを問い合わせる(再読み込みしても下パネルを保つ)
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type !== "dock-state" || !sender.tab) return;

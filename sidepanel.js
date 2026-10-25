@@ -307,12 +307,12 @@ function resetPickButton() {
 }
 
 // 割り当て中のショートカットをボタンに表示(chrome://extensions/shortcuts で変更できる)
-chrome.commands.getAll((cmds) => {
-  const c = cmds.find((x) => x.name === "start-pick");
+// 下パネルの iframe では chrome.commands が使えないので、バックグラウンドに問い合わせる
+chrome.runtime.sendMessage({ type: "get-shortcut" }).then((s) => {
   // Mac では "⌥C" のように返るので、同時押しとわかるよう "⌥+C" にする(Windows は元から "Alt+C")
-  shortcut = ((c && c.shortcut) || "").replace(/([⌘⌥⇧⌃])(?=.)/g, "$1+");
+  shortcut = (s || "").replace(/([⌘⌥⇧⌃])(?=.)/g, "$1+");
   if (!$("#pick").classList.contains("picking")) resetPickButton();
-});
+}).catch(() => {});
 
 // ショートカットが押されたら、ボタンを押したのと同じ動きをする(選択中なら中止)
 // 下パネルは自分のタブ宛てだけ、サイドパネルは自分のウィンドウで下パネルでないタブ宛てだけ受け取る
