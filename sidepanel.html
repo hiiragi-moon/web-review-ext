@@ -9,6 +9,7 @@
   <div id="controls">
   <header>
     <div class="viewbar">
+      <button id="manage" title="コメントしたページの一覧を開く">☰ ページ一覧</button>
       <button id="toBottom" class="side-only" title="ページの下部に表示する">⬇ 下に表示</button>
       <button id="toSide" class="dock-only" title="サイドパネルに戻す">➡ 横に戻す</button>
       <button id="closeDock" class="dock-only" title="下パネルを閉じる">✕ 閉じる</button>
@@ -20,7 +21,7 @@
 
   <section id="form" hidden>
     <div id="target"></div>
-    <textarea id="text" rows="4" placeholder="コメントを入力"></textarea>
+    <textarea id="text" rows="4" placeholder="コメントを入力(自動で保存されます)"></textarea>
     <div class="row">
       <button id="save" class="primary">保存</button>
       <button id="cancel">キャンセル</button>
@@ -29,7 +30,7 @@
 
   <div id="filter">
     <label><input type="checkbox" id="showDone"> 解決済みも表示</label>
-    <span id="count"></span>
+    <span class="right"><span id="count"></span><button id="clearAll" class="danger" title="このページのコメントをすべて削除">全削除</button></span>
   </div>
   </div>
   <div id="splitter" class="dock-only" title="ドラッグで幅を変更"></div>

@@ -33,7 +33,17 @@ button.picking { background: #f59e0b; border-color: #f59e0b; }
   border-radius: 10px; background: #dc2626; color: #fff; font-weight: bold;
 }
 li.done .num { background: #16a34a; }
-.quote { margin: 6px 0; padding: 4px 6px; background: #fef9c3; border-left: 3px solid #eab308; font-size: 12px; word-break: break-all; }
+.quote {
+  margin: 6px 0; padding: 4px 6px; background: #fef9c3; border-left: 3px solid #eab308; font-size: 12px; word-break: break-all;
+  max-height: 7.5em; overflow-y: auto; /* 長い対象は省略せずスクロールで読む */
+}
+.quote.has-image { max-height: none; overflow: visible; }
+.body.empty { color: #9ca3af; }
+#list li.item.writing { background: #eff6ff; }
+#filter { align-items: center; }
+#filter .right { display: flex; align-items: center; gap: 8px; }
+button.danger { padding: 2px 8px; font-size: 12px; color: #b91c1c; border-color: #fca5a5; }
+button.danger:hover { background: #fef2f2; }
 .has-image img { display: block; max-width: 100%; max-height: 120px; object-fit: contain; }
 .body { white-space: pre-wrap; margin: 4px 0; }
 .actions { display: flex; gap: 6px; }

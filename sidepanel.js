@@ -3,7 +3,6 @@ const $ = (s) => document.querySelector(s);
 
 let tab = null;
 let pageKey = "";
-let pending = null;
 
 const keyOf = (u) => {
   try { const x = new URL(u); return x.origin + x.pathname; } catch { return u || ""; }
@@ -24,6 +23,14 @@ async function currentTab() {
 }
 async function getAll() { return (await chrome.storage.local.get(KEY))[KEY] || []; }
 async function setAll(v) { await chrome.storage.local.set({ [KEY]: v }); }
+// id のコメントに patch を書き込む
+async function update(id, patch) {
+  const all = await getAll();
+  const t = all.find((x) => x.id === id);
+  if (!t) return;
+  Object.assign(t, patch);
+  await setAll(all);
+}
 
 function notice(msg) {
   const n = $("#notice");
@@ -41,8 +48,9 @@ function ask(msg) {
   return chrome.tabs.sendMessage(tab.id, msg).catch(() => null);
 }
 
-// 対象の表示(文字なら選んだ文字、画像ならその画像、それ以外は要素内の文字かタグ名)
-function renderTarget(box, c, max = 0) {
+// 対象の表示(文字なら選んだ文字、画像ならその画像・撮影した要素、それ以外は要素内の文字かタグ名)
+// 長い文字は省略せず、枠の中でスクロールして読む
+function renderTarget(box, c) {
   box.textContent = "";
   box.classList.toggle("has-image", !!c.image);
   if (c.image) {
@@ -53,8 +61,7 @@ function renderTarget(box, c, max = 0) {
     box.appendChild(img);
     return;
   }
-  let shown = c.kind === "text" ? c.quote.replace(/\s+/g, " ") : c.text;
-  if (max && shown && shown.length > max) shown = shown.slice(0, max) + "…";
+  const shown = c.kind === "text" ? c.quote.replace(/\s+/g, " ") : c.text;
   box.textContent = shown ? `「${shown}」` : `<${c.tag}>`;
 }
 
@@ -131,19 +138,28 @@ $("#list").addEventListener("dragleave", (e) => {
 
 // 編集中の状態(一覧が描き直されても編集を続けられるよう保持する)
 // field: "comment"=コメント本文(未解決のみ) / "resolution"=解決コメント(解決済みのみ)
-let editing = null; // { id, field, draft }
+// 入力は自動で保存する(「保存」を押し忘れても残る)。「キャンセル」/Esc は編集前に戻す
+let editing = null; // { id, field, draft, orig, fresh }
+let editTimer = 0;
 
-async function saveEdit(id, text) {
-  const value = text.trim();
-  if (!value && editing.field === "comment") return; // 本文は空にできない(解決コメントは空で削除)
-  const all = await getAll();
-  const t = all.find((x) => x.id === id);
-  if (t) {
-    t[editing.field] = value;
-    t.updatedAt = Date.now();
-  }
+async function writeEdit() {
+  clearTimeout(editTimer);
+  if (!editing) return;
+  await update(editing.id, { [editing.field]: editing.draft.trim(), updatedAt: Date.now() });
+}
+
+async function saveEdit() {
+  await writeEdit();
   editing = null;
-  await setAll(all);
+  refresh();
+}
+
+async function cancelEdit() {
+  clearTimeout(editTimer);
+  const e = editing;
+  editing = null;
+  if (e) await update(e.id, { [e.field]: e.orig });
+  refresh();
 }
 
 function editor(c, li) {
@@ -158,36 +174,62 @@ function editor(c, li) {
     ta.placeholder = "解決コメント(どう直したか など)";
   }
   ta.value = editing.draft;
-  ta.oninput = () => (editing.draft = ta.value);
+  ta.oninput = () => {
+    editing.draft = ta.value;
+    clearTimeout(editTimer);
+    editTimer = setTimeout(writeEdit, 400);
+  };
+  ta.onblur = () => {
+    writeEdit();
+    if (deferred) refresh();
+  };
   ta.onkeydown = (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit(c.id, ta.value);
-    if (e.key === "Escape") { editing = null; refresh(); }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit();
+    if (e.key === "Escape") cancelEdit();
   };
   const row = document.createElement("div");
   row.className = "row";
+  row.onmousedown = (e) => e.preventDefault(); // ボタンを押しても入力欄からフォーカスを外さない
   const ok = document.createElement("button");
   ok.className = "primary";
   ok.textContent = "保存";
-  ok.onclick = () => saveEdit(c.id, ta.value);
+  ok.onclick = saveEdit;
   const cancel = document.createElement("button");
   cancel.textContent = "キャンセル";
-  cancel.onclick = () => { editing = null; refresh(); };
+  cancel.onclick = cancelEdit;
   row.append(ok, cancel);
   box.append(ta, row);
-  setTimeout(() => ta.focus(), 0);
+  if (editing.fresh) { // 開いたときだけフォーカスする(描き直しのたびに奪わない)
+    editing.fresh = false;
+    setTimeout(() => ta.focus(), 0);
+  }
   return box;
 }
 
+// 入力中に一覧を描き直すと入力欄が作り直されるので、入力欄から離れるまで待つ
+let deferred = false;
+function refreshSoon() {
+  if (document.activeElement?.closest?.("#list .edit")) {
+    deferred = true;
+    return;
+  }
+  refresh();
+}
+
 async function refresh() {
+  deferred = false;
+  const fid = formId; // 読み込み中に新しいコメントへ切り替わった場合は判定しない
   await currentTab();
   const list = await pageComments();
+  // 入力欄のコメントが消えた・別のページに移ったときは入力欄を閉じる(内容は保存済み)
+  if (fid && fid === formId && !list.some((c) => c.id === fid)) closeForm();
   const showDone = $("#showDone").checked;
   const ul = $("#list");
   ul.innerHTML = "";
   list.forEach((c, i) => {
     if (c.resolved && !showDone) return;
     const li = document.createElement("li");
-    li.className = "item" + (c.resolved ? " done" : "");
+    li.className = "item" + (c.resolved ? " done" : "") + (c.id === formId ? " writing" : "");
     li.dataset.id = c.id;
     li.draggable = true;
     li.ondragstart = (e) => {
@@ -218,15 +260,15 @@ async function refresh() {
 
     const quote = document.createElement("div");
     quote.className = "quote";
-    renderTarget(quote, c, 80);
+    renderTarget(quote, c);
 
     // 未解決は本文、解決済みは解決コメントだけを編集できる
     if (editing?.id === c.id && (editing.field === "resolution") !== !!c.resolved) editing = null;
     const isEditing = editing && editing.id === c.id;
     const body = isEditing && editing.field === "comment" ? editor(c, li) : document.createElement("div");
     if (!(isEditing && editing.field === "comment")) {
-      body.className = "body";
-      body.textContent = c.comment;
+      body.className = "body" + (c.comment ? "" : " empty");
+      body.textContent = c.comment || "(コメント未入力)";
     }
     let resolution = null;
     if (isEditing && editing.field === "resolution") resolution = editor(c, li);
@@ -249,11 +291,12 @@ async function refresh() {
     };
     const edit = document.createElement("button");
     edit.textContent = c.resolved ? (c.resolution ? "解決コメントを編集" : "解決コメント") : "編集";
-    edit.onclick = (e) => {
+    edit.onclick = async (e) => {
       e.stopPropagation();
-      editing = c.resolved
-        ? { id: c.id, field: "resolution", draft: c.resolution || "" }
-        : { id: c.id, field: "comment", draft: c.comment };
+      if (c.id === formId) await closeForm(); // 上の入力欄と同じコメントは二重に編集しない
+      const field = c.resolved ? "resolution" : "comment";
+      const value = c[field] || "";
+      editing = { id: c.id, field, draft: value, orig: value, fresh: true };
       refresh();
     };
     const del = document.createElement("button");
@@ -314,6 +357,18 @@ chrome.runtime.sendMessage({ type: "get-shortcut" }).then((s) => {
   if (!$("#pick").classList.contains("picking")) resetPickButton();
 }).catch(() => {});
 
+// 選択中は、パネル側で押した ↑↓(外側・内側の要素)と Esc(中止)もページで押したのと同じにする
+addEventListener("keydown", (e) => {
+  if (!$("#pick").classList.contains("picking")) return;
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    send({ type: "pick-key", key: e.key });
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    $("#pick").click();
+  }
+});
+
 // ショートカットが押されたら、ボタンを押したのと同じ動きをする(選択中なら中止)
 // 下パネルは自分のタブ宛てだけ、サイドパネルは自分のウィンドウで下パネルでないタブ宛てだけ受け取る
 async function takePickRequest() {
@@ -333,39 +388,103 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type === "get-report" && report && msg.id === report.id) reply(report);
   // ページからの通知は、いま扱っているタブのものだけ受け取る(別のパネルと取り合わない)
   if (sender.tab && tab && sender.tab.id !== tab.id) return;
-  if (msg.type === "picked") {
-    pending = msg.data;
-    resetPickButton();
-    renderTarget($("#target"), pending);
-    $("#form").hidden = false;
-    $("#text").value = "";
-    $("#text").focus();
-  }
+  if (msg.type === "picked") onPicked(msg.data, msg.clip);
   if (msg.type === "pick-cancelled") resetPickButton();
 });
 
-$("#cancel").onclick = () => {
-  pending = null;
+// 選んだ時点でコメントを保存し(本文が空でも残す)、入力も自動で保存する。
+// 「保存」を押し忘れて次の対象を選んだり、パネルを閉じたりしても消えない
+let formId = null; // 入力欄で書いているコメントの id
+let formTimer = 0;
+
+function saveForm() {
+  clearTimeout(formTimer);
+  if (!formId) return Promise.resolve();
+  return update(formId, { comment: $("#text").value.trim(), author: $("#author").value.trim(), updatedAt: Date.now() });
+}
+
+async function closeForm() {
+  await saveForm();
+  formId = null;
   $("#form").hidden = true;
+  $("#list .writing")?.classList.remove("writing");
+}
+
+// 要素の見えている範囲をタブの画面から切り出す
+async function captureClip(clip) {
+  const bmp = await captureBitmap();
+  const s = bmp.width / clip.vw;
+  const [sx, sy, sw, sh] = [clip.x * s, clip.y * s, clip.w * s, clip.h * s];
+  // 保存容量を抑えるため、Retina でも等倍(CSSピクセル)にし、さらに 600×900 に収まるよう縮小して WebP で保存する
+  const k = Math.min(1 / s, 600 / sw, 900 / sh);
+  const cv = new OffscreenCanvas(Math.max(1, Math.round(sw * k)), Math.max(1, Math.round(sh * k)));
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  return toDataURL(await cv.convertToBlob({ type: "image/webp", quality: 0.7 }));
+}
+
+async function onPicked(data, clip) {
+  resetPickButton();
+  await closeForm(); // 前に書いていたコメントを確定する
+  if (clip) {
+    data.image = await captureClip(clip).catch(() => "");
+    send({ type: "clip-done" });
+  }
+  const author = $("#author").value.trim();
+  chrome.storage.local.set({ author });
+  const c = { id: crypto.randomUUID(), ...data, comment: "", author, createdAt: Date.now(), resolved: false };
+  const all = await getAll();
+  all.push(c);
+  await setAll(all);
+  formId = c.id;
+  renderTarget($("#target"), c);
+  $("#form").hidden = false;
+  $("#text").value = "";
+  $("#text").focus();
+}
+
+$("#text").oninput = () => {
+  clearTimeout(formTimer);
+  formTimer = setTimeout(saveForm, 400);
+};
+$("#text").onblur = () => saveForm();
+$("#text").onkeydown = (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("#save").click();
 };
 
-$("#save").onclick = async () => {
-  const comment = $("#text").value.trim();
-  if (!pending || !comment) return;
-  const author = $("#author").value.trim();
-  await chrome.storage.local.set({ author });
-  const all = await getAll();
-  all.push({
-    id: crypto.randomUUID(),
-    ...pending,
-    comment,
-    author,
-    createdAt: Date.now(),
-    resolved: false,
-  });
-  await setAll(all);
-  pending = null;
+$("#save").onclick = closeForm;
+
+// キャンセル = 選んだ対象ごと取り消す(自動保存したコメントを消す)
+$("#cancel").onclick = async () => {
+  const id = formId;
+  if ($("#text").value.trim() && !confirm("入力中のコメントを取り消しますか?")) return;
+  clearTimeout(formTimer);
+  formId = null;
   $("#form").hidden = true;
+  if (id) await setAll((await getAll()).filter((x) => x.id !== id));
+};
+
+// パネルを閉じる・隠れるときは入力途中の内容を書き込む
+addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "hidden") return;
+  saveForm();
+  writeEdit();
+});
+
+// ---- このページのコメントを全削除 ----
+$("#clearAll").onclick = async () => {
+  await currentTab();
+  const list = await pageComments();
+  if (!list.length) return notice("削除するコメントがありません");
+  if (!confirm(`このページのコメント ${list.length} 件をすべて削除しますか?\n解決済みも含みます。元に戻せないので、必要なら先に「JSON出力」で書き出してください。`)) return;
+  clearTimeout(formTimer);
+  formId = null;
+  $("#form").hidden = true;
+  editing = null;
+  const ids = new Set(list.map((c) => c.id));
+  await setAll((await getAll()).filter((c) => !ids.has(c.id)));
+  notice("");
 };
 
 // ---- エクスポート ----
@@ -545,6 +664,8 @@ chrome.runtime.onConnect.addListener(async (p) => {
     ? p.sender?.tab?.id === (await chrome.tabs.getCurrent())?.id
     : p.sender?.tab?.windowId === (await myWindow).id; // 別ウィンドウのタブは対象外
   if (!ok) return p.disconnect();
+  // ページが戻る・進むのキャッシュに入ると Chrome が接続を切る。エラーとして出さないよう受け止める
+  p.onDisconnect.addListener(() => void chrome.runtime.lastError);
   p.postMessage({ type: "panel-ok" });
 });
 if (!DOCK) {
@@ -603,6 +724,21 @@ $("#toSide").onclick = async () => {
   send({ type: "dock-close" }); // この iframe ごと消える
 };
 
+// 管理画面(コメントしたページの一覧)を開く。元のタブへ戻れるよう、いま見ているタブを渡す
+// すでに管理画面のタブがあれば、それを使い回す
+$("#manage").onclick = async () => {
+  await currentTab();
+  const base = chrome.runtime.getURL("manage.html");
+  const url = base + (tab ? `?from=${tab.id}` : "");
+  const old = (await chrome.tabs.query({})).find((t) => (t.url || "").startsWith(base));
+  if (old) {
+    await chrome.tabs.update(old.id, { url, active: true });
+    chrome.windows.update(old.windowId, { focused: true });
+  } else {
+    chrome.tabs.create({ url, ...(tab ? { windowId: tab.windowId, index: tab.index + 1 } : {}) });
+  }
+};
+
 $("#closeDock").onclick = async () => {
   await currentTab();
   await setDocked(tab.id, false);
@@ -611,9 +747,9 @@ $("#closeDock").onclick = async () => {
 
 // ---- 追従 ----
 $("#showDone").onchange = refresh;
-chrome.storage.onChanged.addListener((ch) => { if (ch[KEY]) refresh(); });
-if (!DOCK) chrome.tabs.onActivated.addListener(refresh);
-chrome.tabs.onUpdated.addListener((_id, info) => { if (info.status === "complete" || info.url) refresh(); });
+chrome.storage.onChanged.addListener((ch) => { if (ch[KEY]) refreshSoon(); });
+if (!DOCK) chrome.tabs.onActivated.addListener(refreshSoon);
+chrome.tabs.onUpdated.addListener((_id, info) => { if (info.status === "complete" || info.url) refreshSoon(); });
 
 chrome.storage.local.get("author", (r) => { $("#author").value = r.author || ""; });
 refresh();

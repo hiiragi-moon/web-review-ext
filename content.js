@@ -117,6 +117,7 @@
   // ---- 選択モード(クリック=要素 / ドラッグ=文字) ----
   let picking = false;
   let hoverEl = null;
+  let baseEl = null; // マウスの下にあるいちばん内側の要素。↑↓ で hoverEl をその外側へ広げる
 
   // サイト側で文字選択を禁止していても選べるようにする
   const selectStyle = document.createElement("style");
@@ -132,7 +133,7 @@
       height: r.height + "px",
     });
     tag.textContent =
-      el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + "  クリック=要素 / ドラッグ=文字";
+      el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + "  クリック=要素 / ドラッグ=文字 / ↑↓=外側・内側の要素";
     Object.assign(tag.style, {
       display: "block",
       left: r.left + "px",
@@ -161,11 +162,26 @@
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el || el === host) return;
     if (el === dock?.el) { // 下パネルは対象にしない
-      hoverEl = null;
+      hoverEl = baseEl = null;
       return hideHl();
     }
-    hoverEl = el;
+    if (el === baseEl && hoverEl) return drawHl(hoverEl); // 同じ要素の上なら、↑↓ で選んだ外側の要素を保つ
+    baseEl = hoverEl = el;
     drawHl(el);
+  }
+
+  // ↑ で外側(親)の要素へ広げ、↓ でマウスの下の要素の方へ戻す
+  function widen(up) {
+    if (!hoverEl || !baseEl) return;
+    if (up) {
+      const p = hoverEl.parentElement;
+      if (p && p !== document.body && p !== document.documentElement) hoverEl = p;
+    } else if (hoverEl !== baseEl) {
+      let c = baseEl;
+      while (c.parentElement && c.parentElement !== hoverEl) c = c.parentElement;
+      hoverEl = c;
+    }
+    drawHl(hoverEl);
   }
 
   function base() {
@@ -179,19 +195,39 @@
     return src && src.length < 200000 ? src : "";
   }
 
+  // 要素の見えている範囲(下パネルに隠れた部分は除く)。サイドパネル側でこの範囲を撮影する
+  function clipOf(el) {
+    const r = el.getBoundingClientRect();
+    const bottom = innerHeight - (dock ? dock.height : 0);
+    const x = Math.max(0, r.left), y = Math.max(0, r.top);
+    const w = Math.min(innerWidth, r.right) - x, h = Math.min(bottom, r.bottom) - y;
+    return w >= 4 && h >= 4 ? { x, y, w, h, vw: innerWidth } : null;
+  }
+
+  // 撮影のために隠したピンなどを戻す(サイドパネルから撮影済みの連絡が来ないときも時間で戻す)
+  let overlayTimer = 0;
+  function showOverlay() {
+    clearTimeout(overlayTimer);
+    if (!shot) host.style.display = "";
+  }
+
   function pickElement(el) {
     stopPick();
-    chrome.runtime.sendMessage({
-      type: "picked",
-      data: {
-        ...base(),
-        kind: "element",
-        selector: cssPath(el),
-        tag: el.tagName.toLowerCase(),
-        text: (el.innerText || el.alt || "").trim().slice(0, 80),
-        image: imageOf(el),
-      },
-    });
+    const image = imageOf(el);
+    const data = {
+      ...base(),
+      kind: "element",
+      selector: cssPath(el),
+      tag: el.tagName.toLowerCase(),
+      text: (el.innerText || el.alt || "").trim().slice(0, 2000),
+      image,
+    };
+    // 画像以外の要素は見た目を撮って対象として表示する。写り込まないようピンなどを隠してから知らせる
+    const clip = image ? null : clipOf(el);
+    if (!clip) return chrome.runtime.sendMessage({ type: "picked", data });
+    host.style.display = "none";
+    overlayTimer = setTimeout(showOverlay, 3000);
+    setTimeout(() => chrome.runtime.sendMessage({ type: "picked", data, clip }), 80);
   }
 
   // 選択範囲を文字コメントの対象にする。前後の空白は除き、選べなければ false
@@ -236,6 +272,10 @@
   }
 
   function onKey(e) {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      block(e);
+      return widen(e.key === "ArrowUp");
+    }
     if (e.key === "Escape") {
       block(e);
       stopPick();
@@ -246,9 +286,26 @@
   const stopEvents = ["mousedown", "pointerdown", "pointerup"];
   const blockEvents = ["click", "dblclick", "auxclick", "contextmenu", "dragstart"];
 
+  // ページで最後に選んだ文字。サイドパネルのボタンを押してページからフォーカスが外れると
+  // 選択が消えることがあるので覚えておく(ページ上でクリックしたり選択を外したりしたら忘れる)
+  let lastSel = null;
+  document.addEventListener("selectionchange", () => {
+    if (picking) return;
+    const r = selectedRange();
+    if (r) lastSel = r.cloneRange();
+    else if (document.hasFocus()) lastSel = null;
+  });
+  document.addEventListener("mousedown", () => { if (!picking) lastSel = null; }, true);
+
   function startPick() {
     if (picking) return;
-    // ボタンを押す前の選択は対象にしない(選択モードに入ってから選び直す)
+    // ボタンを押す前に文字を選んでいたら、その文字をそのまま対象にする
+    const pre = selectedRange() || (lastSel?.startContainer.isConnected ? lastSel : null);
+    lastSel = null;
+    if (pre && pickText(pre)) {
+      getSelection()?.removeAllRanges();
+      return;
+    }
     getSelection()?.removeAllRanges();
     picking = true;
     document.documentElement.style.cursor = "crosshair";
@@ -262,7 +319,7 @@
 
   function stopPick() {
     picking = false;
-    hoverEl = null;
+    hoverEl = baseEl = null;
     document.documentElement.style.cursor = "";
     selectStyle.remove();
     hideHl();
@@ -281,19 +338,21 @@
   let port = null;
   function connectPanel() {
     if (port) return;
+    let p;
     try {
-      port = chrome.runtime.connect({ name: "pins" });
+      p = port = chrome.runtime.connect({ name: "pins" });
     } catch {
       return; // 拡張が更新・削除された後の古いスクリプト
     }
-    port.onMessage.addListener((m) => {
+    p.onMessage.addListener((m) => {
       if (m.type === "panel-ok") {
         panelOpen = true;
         renderPins();
       }
     });
-    port.onDisconnect.addListener(() => {
+    p.onDisconnect.addListener(() => {
       void chrome.runtime.lastError;
+      if (port !== p) return; // つなぎ直した後に古い接続の切断が届いた
       port = null;
       panelOpen = false;
       if (picking && !dock) stopPick();
@@ -535,6 +594,8 @@
     if (msg.type === "start-pick") startPick();
     if (msg.type === "stop-pick") stopPick();
     if (msg.type === "focus") flash(msg);
+    if (msg.type === "clip-done") showOverlay();
+    if (msg.type === "pick-key" && picking) widen(msg.key === "ArrowUp");
     if (msg.type === "ping") reply({ ok: true });
     if (msg.type === "panel-opened") connectPanel();
     if (msg.type === "dock-open") openDock();
@@ -552,5 +613,13 @@
 
   load();
   connectPanel();
+  // 戻る・進むでページが復元されたら(その間に接続が切れているので)つなぎ直す
+  addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    port = null;
+    panelOpen = false;
+    load();
+    connectPanel();
+  });
   chrome.runtime.sendMessage({ type: "dock-state" }).then((r) => r?.open && openDock(), () => {});
 })();

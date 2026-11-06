@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>レビューコメント管理</title>
+  <link rel="stylesheet" href="manage.css">
+</head>
+<body>
+  <button id="back" hidden>← 元のページに戻る</button>
+  <header>
+    <h1>レビューコメント管理</h1>
+    <div class="summary" id="summary"></div>
+  </header>
+
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="ページのタイトル・URL・コメントで絞り込み">
+    <label><input type="checkbox" id="openOnly"> 未解決があるページだけ</label>
+    <button id="exportAll">すべてJSON出力</button>
+  </div>
+
+  <ul id="pages"></ul>
+  <p id="empty" hidden>コメントしたページはまだありません。</p>
+
+  <script src="manage.js"></script>
+</body>
+</html>
