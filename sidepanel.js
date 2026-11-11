@@ -17,7 +17,9 @@ if (DOCK) chrome.tabs.getCurrent().then((t) => (dockTab = t));
 async function currentTab() {
   const t = DOCK
     ? await chrome.tabs.getCurrent()
-    : (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
+    // 最後に操作したウィンドウではなく、このパネルがあるウィンドウのタブを見る。
+    // lastFocusedWindow だと、別ウィンドウで操作中に届いた更新で、そちらのタブに切り替わってしまう
+    : (await chrome.tabs.query({ active: true, windowId: (await chrome.windows.getCurrent()).id }))[0];
   tab = t;
   pageKey = t ? keyOf(t.url) : "";
 }
@@ -767,8 +769,14 @@ $("#closeDock").onclick = async () => {
 // ---- 追従 ----
 $("#showDone").onchange = refresh;
 chrome.storage.onChanged.addListener((ch) => { if (ch[KEY]) refreshSoon(); });
-if (!DOCK) chrome.tabs.onActivated.addListener(refreshSoon);
-chrome.tabs.onUpdated.addListener((_id, info) => { if (info.status === "complete" || info.url) refreshSoon(); });
+// 別ウィンドウのタブ切り替え・別のタブの更新では描き直さない(書きかけの入力欄を閉じないため)
+if (!DOCK) chrome.tabs.onActivated.addListener(async (info) => {
+  if (info.windowId === (await chrome.windows.getCurrent()).id) refreshSoon();
+});
+chrome.tabs.onUpdated.addListener((id, info) => {
+  if (tab && id !== tab.id) return;
+  if (info.status === "complete" || info.url) refreshSoon();
+});
 
 chrome.storage.local.get("author", (r) => { $("#author").value = r.author || ""; });
 refresh();
