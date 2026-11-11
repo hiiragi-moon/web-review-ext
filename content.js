@@ -139,7 +139,7 @@
       height: r.height + "px",
     });
     tag.textContent =
-      el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + "  クリック=要素 / ドラッグ=文字 / ↑↓=外側・内側の要素";
+      el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + "  クリック・Enter=要素 / ドラッグ=文字 / ↑↓=外側・内側の要素";
     Object.assign(tag.style, {
       display: "block",
       left: r.left + "px",
@@ -301,6 +301,11 @@
     if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       block(e);
       return widen(e.key === "ArrowUp");
+    }
+    if (e.key === "Enter" && !e.isComposing) {
+      block(e);
+      if (hoverEl) pickElement(hoverEl);
+      return;
     }
     if (e.key === "Escape") {
       block(e);
@@ -520,7 +525,19 @@
     return d;
   }
 
+  // ページを読み込み直さずにURLが変わったら(Vue Router・React Router など)、前の画面のコメントを
+  // すぐ捨てて読み直す。1.5秒ごとの load(true) を待つと、その間に前の画面のピンが別の部品に付いて見えるため
+  function checkUrl() {
+    if (!frames.isTop || !frameContext) return;
+    const k = location.origin + location.pathname;
+    if (k === frameContext.pageKey) return;
+    comments = [];
+    frameContext = { ...frameContext, pageKey: k };
+    load();
+  }
+
   function renderPins() {
+    checkUrl();
     pinsBox.innerHTML = "";
     marksBox.innerHTML = "";
     if (!panelOpen && !dock && !dockVisible) return; // サイドパネルか下パネルを開いている間だけ印を出す
@@ -551,7 +568,10 @@
   ["mouseover", "mouseout", "transitionend", "animationend"].forEach((t) =>
     addEventListener(t, schedule, true)
   );
-  setInterval(renderPins, 400); // SPA・ホバー表示などのDOM変化に追従
+  setInterval(renderPins, 400); // SPA・ホバー表示などのDOM変化に追従(URLの変化も renderPins で確かめる)
+  addEventListener("popstate", schedule);
+  addEventListener("hashchange", schedule);
+  window.navigation?.addEventListener?.("currententrychange", schedule);
   chrome.storage.onChanged.addListener((ch) => {
     if (ch[KEY]) load();
   });
@@ -674,7 +694,10 @@
     if (msg.type === "stop-pick") stopPick();
     if (msg.type === "focus") flash(msg);
     if (msg.type === "clip-done") showOverlay();
-    if (msg.type === "pick-key" && picking) widen(msg.key === "ArrowUp");
+    if (msg.type === "pick-key" && picking) {
+      if (msg.key === "Enter") { if (hoverEl) pickElement(hoverEl); }
+      else widen(msg.key === "ArrowUp");
+    }
     if (msg.type === "ping") reply({ ok: true });
     if (msg.type === "panel-opened") connectPanel();
     if (msg.type === "dock-open") openDock();

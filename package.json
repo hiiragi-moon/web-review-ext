@@ -1,6 +1,6 @@
 {
   "name": "review-comment-ext",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Development tests for the Staging Review Comments Chrome extension",
   "type": "commonjs",
   "devDependencies": {
