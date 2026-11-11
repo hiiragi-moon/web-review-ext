@@ -98,3 +98,30 @@ test('updates in another window do not switch the panel away from its own tab or
     assert.equal(doc.querySelector('#form').hidden, false);
   } finally { s.close(); }
 });
+
+test('AI copy puts the visible comments on the clipboard as Markdown with list numbering', async () => {
+  const s = panel();
+  try {
+    let copied = '';
+    Object.defineProperty(s.w.navigator, 'clipboard', { value: { writeText: async t => { copied = t; } } });
+    const key = 'https://claude.ai/artifact/example';
+    s.state.comments = [
+      { id: 'a', pageKey: key, kind: 'element', tag: 'button', selector: 'main > button', text: '保存する', comment: '色をプライマリーに\nローディングも出す', author: '山田', createdAt: 1, image: 'data:image/webp;base64,xxx' },
+      { id: 'b', pageKey: key, kind: 'text', selector: 'h1', quote: 'ユーザ一覧', range: { start: 0, prefix: '', suffix: 'ページ' }, comment: '「ユーザー一覧」に統一', resolved: true, resolution: '直した', createdAt: 2 },
+      { id: 'c', pageKey: key, kind: 'element', tag: 'p', selector: '#x', framePath: ['#outer'], text: '', comment: '', createdAt: 3 },
+      { id: 'z', pageKey: 'https://other.test/', selector: '#y', comment: '別ページ', createdAt: 4 },
+    ];
+    await wait();
+    await s.w.document.querySelector('#copyAi').onclick();
+    assert.match(copied, /^# レビューコメント：Artifact\n/);
+    assert.match(copied, /未解決 2 件 \/ 全 3 件（未解決のみ/);
+    assert.match(copied, /## 1\. <button>「保存する」\n- 場所：`main > button`\n- コメント：色をプライマリーに\n  ローディングも出す\n- 記入者：山田/);
+    assert.match(copied, /## 3\. <p>\n- iframe：`#outer`\n- 場所：`#x`\n- コメント：\(コメント未入力\)/);
+    assert.doesNotMatch(copied, /ユーザ一覧|別ページ|data:image/);
+
+    s.w.document.querySelector('#showDone').checked = true;
+    await s.w.document.querySelector('#copyAi').onclick();
+    assert.match(copied, /## 2\. 文字「ユーザ一覧」（解決済み）\n- 場所：`h1`\n- 前後の文：…【ユーザ一覧】ページ…\n- コメント：「ユーザー一覧」に統一\n- どう直したか：直した/);
+    assert.match(s.w.document.querySelector('#notice').textContent, /3 件を Markdown でコピーしました/);
+  } finally { s.close(); }
+});
