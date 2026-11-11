@@ -14,7 +14,8 @@
     "storage",
     "unlimitedStorage",
     "tabs",
-    "debugger"
+    "debugger",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"

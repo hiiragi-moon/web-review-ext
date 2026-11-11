@@ -507,6 +507,75 @@ $("#clearAll").onclick = async () => {
 };
 
 // ---- エクスポート ----
+// 「AI用にコピー」: 表示中のコメントを、AIに貼り付けてそのまま修正を頼める Markdown にする。
+// 番号は一覧・ピンと同じ。解決済みは「解決済みも表示」にチェックがあるときだけ含める
+function aiMarkdown(list, { title, url, showDone }) {
+  const clip = (s, n = 300) => {
+    s = (s || "").replace(/\s+/g, " ").trim();
+    return s.length > n ? s.slice(0, n) + "…" : s;
+  };
+  const lines = (s) => (s || "").trim().split("\n").join("\n  ");
+  const items = list.map((c, i) => ({ c, no: i + 1 })).filter(({ c }) => showDone || !c.resolved);
+  const open = list.filter((c) => !c.resolved).length;
+  const out = [
+    `# レビューコメント：${title || url}`,
+    "",
+    `- URL：${url}`,
+    `- 件数：未解決 ${open} 件 / 全 ${list.length} 件${showDone ? "（解決済みも含めて載せています）" : "（未解決のみ載せています）"}`,
+    "- 「場所」は CSS セレクタです。対象の文言とあわせて、コードの該当箇所を探してください。",
+  ];
+  for (const { c, no } of items) {
+    const isText = c.kind === "text";
+    const target = isText ? clip(c.quote, 200) : clip(c.text, 120);
+    out.push("", `## ${no}. ${isText ? "文字" : `<${c.tag || "要素"}>`}${target ? `「${target}」` : ""}${c.resolved ? "（解決済み）" : ""}`);
+    if (c.framePath?.length) out.push(`- iframe：\`${c.framePath.join("` → `")}\``);
+    if (c.selector) out.push(`- 場所：\`${c.selector}\``);
+    if (isText && c.range) out.push(`- 前後の文：…${clip(c.range.prefix, 40)}【${clip(c.quote, 200)}】${clip(c.range.suffix, 40)}…`);
+    if (!isText && c.image && !c.image.startsWith("data:")) out.push(`- 画像：${c.image}`);
+    out.push(`- コメント：${lines(c.comment) || "(コメント未入力)"}`);
+    if (c.resolved && c.resolution) out.push(`- どう直したか：${lines(c.resolution)}`);
+    if (c.author) out.push(`- 記入者：${c.author}`);
+  }
+  if (!items.length) out.push("", "(載せるコメントはありません)");
+  return out.join("\n") + "\n";
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // 下パネル(ページ内の iframe)などで Clipboard API が使えないときの予備
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}
+
+$("#copyAi").onclick = async () => {
+  await saveForm(); // 書きかけのコメントも含める
+  await writeEdit();
+  await currentTab();
+  const list = await pageComments();
+  if (!list.length) return notice("このページにはコメントがありません");
+  const showDone = $("#showDone").checked;
+  const md = aiMarkdown(list, {
+    title: (tab && tab.title) || list[0].title || "",
+    url: tab ? tab.url : pageKey,
+    showDone,
+  });
+  if (!(await copyText(md))) return notice("コピーできませんでした。もう一度お試しください");
+  const n = list.filter((c) => showDone || !c.resolved).length;
+  const msg = `${n} 件を Markdown でコピーしました。AI に貼り付けて使えます`;
+  notice(msg);
+  setTimeout(() => { if ($("#notice").textContent === msg) notice(""); }, 3000);
+};
+
 $("#json").onclick = async () => {
   // 表示中のページ1件分を、title/url をメタデータ、コメントを items に並べて出力
   await currentTab();
