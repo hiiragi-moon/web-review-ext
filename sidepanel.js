@@ -45,7 +45,7 @@ function send(msg) {
 
 function ask(msg) {
   if (!tab) return Promise.resolve(null);
-  return chrome.tabs.sendMessage(tab.id, msg).catch(() => null);
+  return chrome.tabs.sendMessage(tab.id, msg, { frameId: 0 }).catch(() => null);
 }
 
 // 対象の表示(文字なら選んだ文字、画像ならその画像・撮影した要素、それ以外は要素内の文字かタグ名)
@@ -313,7 +313,7 @@ async function refresh() {
     if (resolution) content.append(resolution);
     content.append(actions);
     li.append(grip, content);
-    li.onclick = () => send({ type: "focus", id: c.id, selector: c.selector });
+    li.onclick = () => send({ type: "focus", id: c.id, selector: c.selector, framePath: c.framePath || [] });
     ul.appendChild(li);
   });
   const open = list.filter((c) => !c.resolved).length;
@@ -388,8 +388,19 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type === "get-report" && report && msg.id === report.id) reply(report);
   // ページからの通知は、いま扱っているタブのものだけ受け取る(別のパネルと取り合わない)
   if (sender.tab && tab && sender.tab.id !== tab.id) return;
-  if (msg.type === "picked") onPicked(msg.data, msg.clip);
-  if (msg.type === "pick-cancelled") resetPickButton();
+  if (msg.type === "picked" && sender.tab && $("#pick").classList.contains("picking")) {
+    const url = sender.tab.url || tab?.url || "";
+    onPicked({ ...msg.data, pageKey: keyOf(url), url, title: sender.tab.title || "" }, msg.clip);
+  }
+  if (msg.type === "pick-error" && sender.tab) {
+    resetPickButton();
+    send({ type: "stop-pick" });
+    notice(msg.error || "フレーム内の要素を選択できませんでした");
+  }
+  if (msg.type === "pick-cancelled" && sender.tab) {
+    resetPickButton();
+    send({ type: "stop-pick" });
+  }
 });
 
 // 選んだ時点でコメントを保存し(本文が空でも残す)、入力も自動で保存する。
@@ -426,10 +437,16 @@ async function captureClip(clip) {
 
 async function onPicked(data, clip) {
   resetPickButton();
+  await send({ type: "stop-pick" });
   await closeForm(); // 前に書いていたコメントを確定する
   if (clip) {
-    data.image = await captureClip(clip).catch(() => "");
-    send({ type: "clip-done" });
+    await send({ type: "hide-overlays" });
+    try {
+      await sleep(80);
+      data.image = await captureClip(clip).catch(() => "");
+    } finally {
+      send({ type: "clip-done" });
+    }
   }
   const author = $("#author").value.trim();
   chrome.storage.local.set({ author });
@@ -498,6 +515,7 @@ $("#json").onclick = async () => {
     items: list.map((c, i) => ({
       no: i + 1,
       selector: c.selector,
+      framePath: c.framePath || [],
       tag: c.tag,
       kind: c.kind || "element",
       targetText: c.kind === "text" ? c.quote : c.text,

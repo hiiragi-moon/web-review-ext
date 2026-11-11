@@ -3,7 +3,12 @@
   window.__rcLoaded = true;
 
   const KEY = "comments";
-  const pageKey = () => location.origin + location.pathname;
+  const frames = ReviewFrames.create(cssPath);
+  let frameContext = null;
+  let dockVisible = false;
+  let frameShooting = false;
+  const pageKey = () => frameContext?.pageKey;
+  const owns = (c) => frameContext && JSON.stringify(c.framePath || []) === JSON.stringify(frameContext.framePath);
 
   // ---- オーバーレイ(Shadow DOMでサイトのCSSと分離) ----
   const host = document.createElement("div");
@@ -98,6 +103,7 @@
 
   // コメントの対象(要素 or 文字範囲)を、表示判定用の要素と矩形リストで返す
   function targetOf(c) {
+    if (!owns(c)) return null;
     if (c.kind === "text" && c.range) {
       const range = locateText(c);
       if (!range) return null;
@@ -157,14 +163,22 @@
     e.stopImmediatePropagation();
   };
 
+  function clearHover() {
+    hoverEl = baseEl = null;
+    hideHl();
+  }
+
+  function onOut(e) {
+    const next = e.relatedTarget;
+    // iframe内のイベントは親documentへ届かないため、境界を越えた時点で消す。
+    if (!next || next.ownerDocument !== document || /^(IFRAME|FRAME)$/.test(next.tagName || "")) clearHover();
+  }
+
   function onMove(e) {
     if (e.buttons & 1) return hideHl(); // ドラッグ中は文字選択の邪魔をしない
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!el || el === host) return;
-    if (el === dock?.el) { // 下パネルは対象にしない
-      hoverEl = baseEl = null;
-      return hideHl();
-    }
+    // フレーム内の対象はそのフレームのスクリプトが表示する。枠全体を重ねない。
+    if (!el || el === host || el === dock?.el || /^(IFRAME|FRAME)$/.test(el.tagName)) return clearHover();
     if (el === baseEl && hoverEl) return drawHl(hoverEl); // 同じ要素の上なら、↑↓ で選んだ外側の要素を保つ
     baseEl = hoverEl = el;
     drawHl(el);
@@ -184,8 +198,25 @@
     drawHl(hoverEl);
   }
 
-  function base() {
-    return { pageKey: pageKey(), url: location.href, title: document.title };
+  async function resolveFrameContext(clip = null) {
+    const c = await frames.context(clip);
+    if (frames.isTop) return c;
+    // 親URL・タイトルはページのpostMessageに流さず、拡張機能内部だけで取得する。
+    const page = await chrome.runtime.sendMessage({ type: "frame-page" });
+    if (!page?.pageKey) throw new Error("親ページの情報を取得できません。ページを再読み込みしてください。");
+    return { ...c, ...page };
+  }
+
+  async function emitPicked(data, clip = null) {
+    try {
+      const c = await resolveFrameContext(clip);
+      frameContext = c;
+      const { pageKey, url, title, framePath } = c;
+      chrome.runtime.sendMessage({ type: "picked", data: { ...data, pageKey, url, title, framePath }, clip: c.clip });
+    } catch (e) {
+      showOverlay();
+      chrome.runtime.sendMessage({ type: "pick-error", error: e.message });
+    }
   }
 
   // 画像(またはテキストのない要素の中の画像1枚)なら、その画像のURLを返す
@@ -208,14 +239,13 @@
   let overlayTimer = 0;
   function showOverlay() {
     clearTimeout(overlayTimer);
-    if (!shot) host.style.display = "";
+    if (!shot && !frameShooting) host.style.display = "";
   }
 
   function pickElement(el) {
     stopPick();
     const image = imageOf(el);
     const data = {
-      ...base(),
       kind: "element",
       selector: cssPath(el),
       tag: el.tagName.toLowerCase(),
@@ -224,10 +254,10 @@
     };
     // 画像以外の要素は見た目を撮って対象として表示する。写り込まないようピンなどを隠してから知らせる
     const clip = image ? null : clipOf(el);
-    if (!clip) return chrome.runtime.sendMessage({ type: "picked", data });
+    if (!clip) return emitPicked(data);
     host.style.display = "none";
     overlayTimer = setTimeout(showOverlay, 3000);
-    setTimeout(() => chrome.runtime.sendMessage({ type: "picked", data, clip }), 80);
+    setTimeout(() => emitPicked(data, clip), 80);
   }
 
   // 選択範囲を文字コメントの対象にする。前後の空白は除き、選べなければ false
@@ -243,17 +273,13 @@
     if (s >= e) return false;
     const quote = full.slice(s, e);
     stopPick();
-    chrome.runtime.sendMessage({
-      type: "picked",
-      data: {
-        ...base(),
-        kind: "text",
-        selector: cssPath(root),
-        tag: root.tagName.toLowerCase(),
-        text: quote.replace(/\s+/g, " ").slice(0, 80),
-        quote,
-        range: { start: s, prefix: full.slice(Math.max(0, s - 20), s), suffix: full.slice(e, e + 20) },
-      },
+    emitPicked({
+      kind: "text",
+      selector: cssPath(root),
+      tag: root.tagName.toLowerCase(),
+      text: quote.replace(/\s+/g, " ").slice(0, 80),
+      quote,
+      range: { start: s, prefix: full.slice(Math.max(0, s - 20), s), suffix: full.slice(e, e + 20) },
     });
     return true;
   }
@@ -300,7 +326,8 @@
   function startPick() {
     if (picking) return;
     // ボタンを押す前に文字を選んでいたら、その文字をそのまま対象にする
-    const pre = selectedRange() || (lastSel?.startContainer.isConnected ? lastSel : null);
+    const inChild = /^(IFRAME|FRAME)$/.test(document.activeElement?.tagName || "");
+    const pre = !inChild && (selectedRange() || (lastSel?.startContainer.isConnected ? lastSel : null));
     lastSel = null;
     if (pre && pickText(pre)) {
       getSelection()?.removeAllRanges();
@@ -311,6 +338,8 @@
     document.documentElement.style.cursor = "crosshair";
     document.head.appendChild(selectStyle);
     document.addEventListener("mousemove", onMove, true);
+    document.addEventListener("mouseout", onOut, true);
+    document.addEventListener("mouseleave", clearHover);
     document.addEventListener("mouseup", onUp, true);
     document.addEventListener("keydown", onKey, true);
     stopEvents.forEach((t) => document.addEventListener(t, stop, true));
@@ -324,6 +353,8 @@
     selectStyle.remove();
     hideHl();
     document.removeEventListener("mousemove", onMove, true);
+    document.removeEventListener("mouseout", onOut, true);
+    document.removeEventListener("mouseleave", clearHover);
     document.removeEventListener("mouseup", onUp, true);
     document.removeEventListener("keydown", onKey, true);
     stopEvents.forEach((t) => document.removeEventListener(t, stop, true));
@@ -355,7 +386,7 @@
       if (port !== p) return; // つなぎ直した後に古い接続の切断が届いた
       port = null;
       panelOpen = false;
-      if (picking && !dock) stopPick();
+      if (picking && !dock && !dockVisible) stopPick();
       renderPins();
     });
   }
@@ -365,7 +396,8 @@
   const DOCK_MIN = 180;
 
   async function openDock() {
-    if (dock) return;
+    dockVisible = true;
+    if (!frames.isTop || dock) return renderPins();
     const { dockHeight = 320 } = await chrome.storage.local.get("dockHeight");
     const el = document.createElement("div");
     el.style.cssText = "all:initial;position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:block;";
@@ -414,7 +446,11 @@
   }
 
   function closeDock() {
-    if (!dock) return;
+    dockVisible = false;
+    if (!dock) {
+      if (picking && !panelOpen) stopPick();
+      return renderPins();
+    }
     dock.el.remove();
     dock.spacer.remove();
     dock = null;
@@ -424,7 +460,14 @@
   // レビュー番号の並び(並べ替えた順 order → なければ作成順)。サイドパネルと同じ
   const byOrder = (a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt);
 
-  function load() {
+  async function load(onlyIfMoved = false) {
+    try {
+      const next = await resolveFrameContext();
+      const unchanged = frameContext?.pageKey === next.pageKey &&
+        JSON.stringify(frameContext?.framePath) === JSON.stringify(next.framePath);
+      frameContext = next;
+      if (onlyIfMoved && unchanged) return;
+    } catch { return; }
     chrome.storage.local.get(KEY, (r) => {
       comments = (r[KEY] || [])
         .filter((c) => c.pageKey === pageKey())
@@ -480,7 +523,7 @@
   function renderPins() {
     pinsBox.innerHTML = "";
     marksBox.innerHTML = "";
-    if (!panelOpen && !dock) return; // サイドパネルか下パネルを開いている間だけ印を出す
+    if (!panelOpen && !dock && !dockVisible) return; // サイドパネルか下パネルを開いている間だけ印を出す
     comments.forEach((c, i) => {
       const t = targetOf(c);
       if (!t || !t.rects.length || !isVisible(t.el)) return;
@@ -515,7 +558,13 @@
 
   // ---- サイドパネルからの指示 ----
   function flash(msg) {
-    const c = comments.find((x) => x.id === msg.id) || { selector: msg.selector };
+    const c = comments.find((x) => x.id === msg.id) || msg;
+    const path = c.framePath || [];
+    const ownPath = frameContext?.framePath;
+    if (ownPath && path.length > ownPath.length && ownPath.every((p, i) => p === path[i])) {
+      try { document.querySelector(path[ownPath.length])?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+      return;
+    }
     const t0 = targetOf(c);
     if (!t0) return;
     t0.el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -556,7 +605,8 @@
         rects: t.rects.map((r) => ({ x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height })),
       };
     });
-    return { docH, vw: innerWidth, vh: innerHeight, targets };
+    const children = await chrome.runtime.sendMessage({ type: "collect-frame-targets" }).catch(() => []);
+    return { docH, vw: innerWidth, vh: innerHeight, targets: targets.concat(children || []) };
   }
 
   // 2枚目以降は固定ヘッダーなどが何度も写らないように隠す
@@ -587,10 +637,39 @@
     }
     scrollTo({ left: shot.scroll[0], top: shot.scroll[1], behavior: "instant" });
     shot = null;
+    chrome.runtime.sendMessage({ type: "end-frame-shot" }).catch(() => {});
     renderPins();
   }
 
+  async function frameTargets() {
+    frameShooting = true;
+    host.style.display = "none";
+    const targets = [];
+    for (const c of comments) {
+      const t = targetOf(c);
+      if (!t || !isVisible(t.el)) continue;
+      const rects = [];
+      for (const r of t.rects) {
+        const local = { x: Math.max(0, r.left), y: Math.max(0, r.top),
+          w: Math.min(innerWidth, r.right) - Math.max(0, r.left),
+          h: Math.min(innerHeight, r.bottom) - Math.max(0, r.top) };
+        if (local.w <= 0 || local.h <= 0) continue;
+        const ctx = await frames.context(local, true);
+        if (ctx.clip) rects.push({ x: ctx.clip.x + ctx.scrollX, y: ctx.clip.y + ctx.scrollY, w: ctx.clip.w, h: ctx.clip.h });
+      }
+      targets.push({ id: c.id, text: t.text, rects });
+    }
+    return targets;
+  }
+
   chrome.runtime.onMessage.addListener((msg, _s, reply) => {
+    if (msg.type === "frame-state" && frames.isTop) reply({ picking, dock: !!dock });
+    if (msg.type === "shot-frame-begin" && !frames.isTop) {
+      frameTargets().then(reply, () => reply([]));
+      return true;
+    }
+    if (msg.type === "shot-frame-end") { frameShooting = false; showOverlay(); }
+    if (msg.type === "hide-overlays") host.style.display = "none";
     if (msg.type === "start-pick") startPick();
     if (msg.type === "stop-pick") stopPick();
     if (msg.type === "focus") flash(msg);
@@ -600,18 +679,29 @@
     if (msg.type === "panel-opened") connectPanel();
     if (msg.type === "dock-open") openDock();
     if (msg.type === "dock-close") closeDock();
-    if (msg.type === "shot-begin") {
+    if (msg.type === "shot-begin" && frames.isTop) {
       beginShot().then(reply, () => reply(null));
       return true;
     }
-    if (msg.type === "shot-scroll") {
+    if (msg.type === "shot-scroll" && frames.isTop) {
       shotScroll(msg.y, msg.index).then(reply, () => reply(null));
       return true;
     }
-    if (msg.type === "shot-end") endShot();
+    if (msg.type === "shot-end" && frames.isTop) endShot();
   });
 
+  // フレームIDは実行中の通信専用。保存データには再読み込みで変わらないセレクタ列を使う。
+  function registerFrame() {
+    let p;
+    try { p = chrome.runtime.connect({ name: "review-frame" }); } catch { return; }
+    p.onDisconnect.addListener(() => {
+      void chrome.runtime.lastError;
+      setTimeout(() => { if (document.documentElement.isConnected) registerFrame(); }, 1000);
+    });
+  }
+  registerFrame();
   load();
+  setInterval(() => load(true), 1500); // SPAで親URLやiframeの位置が変わったときも更新する
   connectPanel();
   // 戻る・進むでページが復元されたら(その間に接続が切れているので)つなぎ直す
   addEventListener("pageshow", (e) => {
@@ -622,4 +712,8 @@
     connectPanel();
   });
   chrome.runtime.sendMessage({ type: "dock-state" }).then((r) => r?.open && openDock(), () => {});
+  if (!frames.isTop) chrome.runtime.sendMessage({ type: "initial-frame-state" }).then(r => {
+    if (r?.dock) openDock();
+    if (r?.picking) startPick();
+  }, () => {});
 })();
