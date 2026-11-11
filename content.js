@@ -415,7 +415,7 @@
         .cover{position:fixed;inset:0;display:none;cursor:ns-resize}
       </style>
       <div class="bar" title="ドラッグで高さを変更"></div><iframe></iframe><div class="cover"></div>`;
-    sh.querySelector("iframe").allow = "clipboard-write"; // 下パネルの「AI用にコピー」のため
+    sh.querySelector("iframe").allow = "clipboard-write"; // 下パネルの「AIコピー」のため
     sh.querySelector("iframe").src = chrome.runtime.getURL("sidepanel.html?dock=1");
     // ページの最後が下パネルに隠れないよう、同じ高さの余白を足す
     const spacer = document.createElement("style");

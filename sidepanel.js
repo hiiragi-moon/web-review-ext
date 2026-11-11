@@ -507,7 +507,7 @@ $("#clearAll").onclick = async () => {
 };
 
 // ---- エクスポート ----
-// 「AI用にコピー」: 表示中のコメントを、AIに貼り付けてそのまま修正を頼める Markdown にする。
+// 「AIコピー」: 表示中のコメントを、AIに貼り付けてそのまま修正を頼める Markdown にする。
 // 番号は一覧・ピンと同じ。解決済みは「解決済みも表示」にチェックがあるときだけ含める
 function aiMarkdown(list, { title, url, showDone }) {
   const clip = (s, n = 300) => {
