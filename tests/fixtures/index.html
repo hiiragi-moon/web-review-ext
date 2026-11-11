@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>iframeレビュー動作確認</title>
+<style>
+  body { font: 16px sans-serif; margin: 24px; }
+  iframe { width: 95%; height: 260px; border: 4px solid #94a3b8; }
+  section { margin: 24px 0; }
+</style>
+<h1>iframeレビュー動作確認</h1>
+<p id="target">親ページの対象。同じidが各フレームにもあります。</p>
+<p>各フレームの文字・ボタンを選択し、番号とコメントが親ページにまとまることを確認します。</p>
+<section><h2>同一オリジン・入れ子</h2><iframe id="same-origin" src="child.html"></iframe></section>
+<section><h2>別オリジン（localhost → 127.0.0.1）</h2><iframe id="cross-origin" src="http://127.0.0.1:8765/tests/fixtures/child.html"></iframe></section>
+<section><h2>Sandbox / srcdoc</h2><iframe id="sandbox" sandbox="allow-scripts" srcdoc="<!doctype html><meta charset='utf-8'><p id='target'>sandbox内の文字を選択できます。</p><button>Sandboxボタン</button>"></iframe></section>
+<section><h2>枠線・拡大縮小</h2><iframe id="scaled" src="child.html" style="transform:scale(.8);transform-origin:top left"></iframe></section>
+<section id="dynamic"><h2>後から読み込まれるiframe</h2><button onclick="const f=document.createElement('iframe');f.src='child.html';this.parentNode.append(f);this.remove()">iframeを追加</button></section>

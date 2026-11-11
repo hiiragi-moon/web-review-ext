@@ -139,6 +139,7 @@ function pageJson(g) {
     items: g.list.map((c, i) => ({
       no: i + 1,
       selector: c.selector,
+      framePath: c.framePath || [],
       tag: c.tag,
       kind: c.kind || "element",
       targetText: c.kind === "text" ? c.quote : c.text,

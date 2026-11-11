@@ -1,0 +1,17 @@
+{
+  "name": "review-comment-ext",
+  "version": "1.2.0",
+  "description": "Development tests for the Staging Review Comments Chrome extension",
+  "type": "commonjs",
+  "devDependencies": {
+    "jsdom": "^31.0.0"
+  },
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check frames.js && node --check content.js && node --check background.js && node --check sidepanel.js && node --check manage.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

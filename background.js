@@ -55,3 +55,46 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   })().catch((e) => reply({ error: String(e?.message || e) }));
   return true;
 });
+
+// 実行中の各フレームへの通信。永続データの対象識別にはframeIdを使わない。
+const reviewFrames = new Map();
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "review-frame" || !port.sender?.tab) return;
+  const tabId = port.sender.tab.id;
+  let entries = reviewFrames.get(tabId);
+  if (!entries) reviewFrames.set(tabId, entries = new Map());
+  const frameId = port.sender.frameId;
+  entries.set(frameId, port);
+  port.onDisconnect.addListener(() => {
+    void chrome.runtime.lastError;
+    if (entries.get(frameId) === port) entries.delete(frameId);
+    if (!entries.size) reviewFrames.delete(tabId);
+  });
+});
+chrome.tabs.onRemoved.addListener((id) => reviewFrames.delete(id));
+
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (!sender.tab) return;
+  const tabId = sender.tab.id;
+  if (msg.type === "frame-page") {
+    try {
+      const u = new URL(sender.tab.url);
+      reply({ pageKey: u.origin + u.pathname, url: u.href, title: sender.tab.title || "" });
+    } catch { reply(null); }
+    return;
+  }
+  if (msg.type === "initial-frame-state") {
+    chrome.tabs.sendMessage(tabId, { type: "frame-state" }, { frameId: 0 }).then(reply, () => reply(null));
+    return true;
+  }
+  if (sender.frameId !== 0) return;
+  if (msg.type === "collect-frame-targets") {
+    const frames = [...(reviewFrames.get(tabId)?.keys() || [])].filter(id => id !== 0);
+    Promise.all(frames.map(frameId => chrome.tabs.sendMessage(tabId, { type: "shot-frame-begin" }, { frameId }).catch(() => [])))
+      .then(results => reply(results.flat()));
+    return true;
+  }
+  if (msg.type === "end-frame-shot") {
+    chrome.tabs.sendMessage(tabId, { type: "shot-frame-end" }).catch(() => {});
+  }
+});
