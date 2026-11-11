@@ -3,6 +3,11 @@
 Staging Review Comments の変更履歴です。新しい版が上です。
 更新したら、`chrome://extensions` でこの拡張の「再読み込み」（↻）を押し、開いているページも再読み込みしてください。
 
+## v1.2.1（2026-11-11）
+
+### 修正
+- 戻る・進むでページを移動したときに、`The page keeping the extension port is moved into back/forward cache…` のエラーがまた出るようになっていた問題を修正しました（v1.2.0 の iframe 対応で増えた接続でも、切断時のエラーを受け止めるようにしました）。
+
 ## v1.2.0（2026-11-08）
 
 ### 新機能

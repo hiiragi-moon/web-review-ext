@@ -59,6 +59,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 // 実行中の各フレームへの通信。永続データの対象識別にはframeIdを使わない。
 const reviewFrames = new Map();
 chrome.runtime.onConnect.addListener((port) => {
+  // 使わない接続(サイドパネル向けの "pins" など)も、ページが戻る・進むのキャッシュに入ると
+  // Chrome がエラー付きで切断する。受け止めないと "Unchecked runtime.lastError" が出る
+  port.onDisconnect.addListener(() => void chrome.runtime.lastError);
   if (port.name !== "review-frame" || !port.sender?.tab) return;
   const tabId = port.sender.tab.id;
   let entries = reviewFrames.get(tabId);

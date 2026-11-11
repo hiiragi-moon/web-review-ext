@@ -24,7 +24,12 @@ function worker() {
     return () => onDisconnect.fns.forEach(f => f());
   };
   const request = (type, frameId = 0) => new Promise(resolve => onMessage.fns.forEach(f => f({ type }, { tab: { id: 10, url: 'https://claude.ai/artifact/example?view=preview', title: 'Artifact' }, frameId }, resolve)));
-  return { connect, request, sent };
+  const connectNamed = name => {
+    const onDisconnect = listeners();
+    onConnect.fns.forEach(f => f({ name, sender: { tab: { id: 10 }, frameId: 0 }, onDisconnect }));
+    return onDisconnect;
+  };
+  return { connect, connectNamed, request, sent };
 }
 
 test('PDF collector addresses each child separately, tolerates navigation and excludes the parent', async () => {
@@ -60,4 +65,11 @@ test('parent page identity is returned only on the extension runtime channel', a
     url: 'https://claude.ai/artifact/example?view=preview',
     title: 'Artifact',
   });
+});
+
+test('ports for other contexts still swallow the back/forward cache disconnect error', () => {
+  const w = worker();
+  for (const name of ['pins', 'review-frame']) {
+    assert.ok(w.connectNamed(name).fns.length > 0, `${name} port has no onDisconnect listener`);
+  }
 });

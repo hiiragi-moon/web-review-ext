@@ -6,11 +6,11 @@ const wait = () => new Promise(resolve => setTimeout(resolve, 30));
 
 function panel() {
   const dom = new JSDOM(fs.readFileSync('sidepanel.html', 'utf8'), { url: 'https://extension.test/sidepanel.html', runScripts: 'outside-only' });
-  const w = dom.window, handlers = [], sent = [], state = { comments: [] };
+  const w = dom.window, handlers = [], connects = [], sent = [], state = { comments: [] };
   const tab = { id: 10, windowId: 1, url: 'https://claude.ai/artifact/example', title: 'Artifact' };
   const event = { addListener() {} };
   w.chrome = {
-    runtime: { onMessage: { addListener: f => handlers.push(f) }, onConnect: event, sendMessage: async () => '' },
+    runtime: { onMessage: { addListener: f => handlers.push(f) }, onConnect: { addListener: f => connects.push(f) }, sendMessage: async () => '' },
     windows: { getCurrent: async () => ({ id: 1 }) },
     tabs: {
       query: async () => [tab],
@@ -24,7 +24,13 @@ function panel() {
   };
   w.eval(fs.readFileSync('sidepanel.js', 'utf8'));
   const receive = (msg, frameId = 2) => handlers.forEach(f => f(msg, { tab, frameId }, () => {}));
-  return { w, state, sent, receive, close: () => dom.window.close() };
+  const connect = (name) => {
+    const fns = [];
+    const p = { name, sender: { tab, frameId: 0 }, onDisconnect: { addListener: f => fns.push(f) }, postMessage() {}, disconnect() {} };
+    connects.forEach(f => f(p));
+    return fns; // 接続を受けた直後(awaitの前)に登録されているか見る
+  };
+  return { w, state, sent, receive, connect, close: () => dom.window.close() };
 }
 
 test('first frame selection wins, stops every frame and is saved under the tab URL', async () => {
@@ -51,5 +57,14 @@ test('Escape in one frame stops selection in every frame', async () => {
     await wait();
     assert.ok(s.sent.some(m => m.type === 'stop-pick'));
     assert.equal(s.w.document.querySelector('#pick').classList.contains('picking'), false);
+  } finally { s.close(); }
+});
+
+test('every received port swallows the back/forward cache disconnect error immediately', () => {
+  const s = panel();
+  try {
+    for (const name of ['pins', 'review-frame']) {
+      assert.ok(s.connect(name).length > 0, `${name} port has no onDisconnect listener before the first await`);
+    }
   } finally { s.close(); }
 });

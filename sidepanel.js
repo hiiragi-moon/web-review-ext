@@ -677,13 +677,14 @@ $("#pdf").onclick = async () => {
 // ---- ページ側にパネルが開いていることを伝える(接続が切れる=パネルを閉じた) ----
 const myWindow = chrome.windows.getCurrent();
 chrome.runtime.onConnect.addListener(async (p) => {
+  // ページが戻る・進むのキャッシュに入ると Chrome が接続を切る。エラーとして出さないよう受け止める。
+  // 使わない接続(各フレームの "review-frame")や、下の await 中に切れた接続も対象なので最初に登録する
+  p.onDisconnect.addListener(() => void chrome.runtime.lastError);
   if (p.name !== "pins") return;
   const ok = DOCK
     ? p.sender?.tab?.id === (await chrome.tabs.getCurrent())?.id
     : p.sender?.tab?.windowId === (await myWindow).id; // 別ウィンドウのタブは対象外
   if (!ok) return p.disconnect();
-  // ページが戻る・進むのキャッシュに入ると Chrome が接続を切る。エラーとして出さないよう受け止める
-  p.onDisconnect.addListener(() => void chrome.runtime.lastError);
   p.postMessage({ type: "panel-ok" });
 });
 if (!DOCK) {
