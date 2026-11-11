@@ -357,10 +357,10 @@ chrome.runtime.sendMessage({ type: "get-shortcut" }).then((s) => {
   if (!$("#pick").classList.contains("picking")) resetPickButton();
 }).catch(() => {});
 
-// 選択中は、パネル側で押した ↑↓(外側・内側の要素)と Esc(中止)もページで押したのと同じにする
+// 選択中は、パネル側で押した ↑↓(外側・内側の要素)・Enter(決定)・Esc(中止)もページで押したのと同じにする
 addEventListener("keydown", (e) => {
   if (!$("#pick").classList.contains("picking")) return;
-  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown" || (e.key === "Enter" && !e.isComposing && !/^(TEXTAREA|INPUT)$/.test(e.target.tagName))) {
     e.preventDefault();
     send({ type: "pick-key", key: e.key });
   } else if (e.key === "Escape") {

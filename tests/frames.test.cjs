@@ -285,3 +285,51 @@ test('leaving a child document clears its highlight and stale click target', asy
     assert.equal(s.messages.some(m => m.type === 'picked'), false);
   } finally { s.close(); }
 });
+
+test('an SPA route change drops the previous route pins at once and loads the new route comments', async () => {
+  const s = setup();
+  try {
+    s.state.comments = [
+      { id: 'a', pageKey: 'https://claude.ai/artifact/example', selector: '#same', createdAt: 1 },
+      { id: 'b', pageKey: 'https://claude.ai/other', selector: '#same', createdAt: 2, resolved: true },
+    ];
+    s.changed.forEach(f => f({ comments: {} }));
+    await wait(100);
+    const pins = () => [...s.top.document.querySelector('div').shadowRoot.querySelectorAll('.pin')].map(p => p.textContent);
+    assert.deepEqual(pins(), ['1']);
+    s.top.history.pushState({}, '', '/other');
+    s.top.dispatchEvent(new s.top.Event('scroll'));
+    await wait(50);
+    // 新しい画面のコメント(b・解決済み)だけが出る
+    assert.deepEqual([...s.top.document.querySelector('div').shadowRoot.querySelectorAll('.pin')].map(p => p.className), ['pin done']);
+    s.top.history.pushState({}, '', '/nowhere');
+    s.top.dispatchEvent(new s.top.Event('scroll'));
+    await wait(50);
+    assert.deepEqual(pins(), []);
+  } finally { s.close(); }
+});
+
+test('Enter picks the highlighted element like a click, from the page or from the panel', async () => {
+  const s = setup();
+  try {
+    await wait();
+    s.send(0, { type: 'start-pick' });
+    s.top.document.dispatchEvent(new s.top.MouseEvent('mousemove', { clientX: 15, clientY: 20 }));
+    s.top.document.dispatchEvent(new s.top.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await wait(150);
+    let picked = s.messages.filter(m => m.type === 'picked');
+    assert.equal(picked.length, 1);
+    assert.equal(picked[0].frame, 0);
+    assert.equal(picked[0].data.selector, '#same');
+
+    s.messages.length = 0;
+    s.windows.forEach((_, i) => s.send(i, { type: 'start-pick' }));
+    s.nested.document.dispatchEvent(new s.nested.MouseEvent('mousemove', { clientX: 15, clientY: 20 }));
+    s.windows.forEach((_, i) => s.send(i, { type: 'pick-key', key: 'Enter' }));
+    await wait(150);
+    picked = s.messages.filter(m => m.type === 'picked');
+    assert.equal(picked.length, 1);
+    assert.equal(picked[0].frame, 2);
+    assert.deepEqual(picked[0].data.framePath, ['#outer', '#inner']);
+  } finally { s.close(); }
+});
