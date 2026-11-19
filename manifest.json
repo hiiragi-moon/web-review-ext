@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Staging Review Comments",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "ステージングサイト上の要素を選んでコメントできるレビュー用拡張",
   "icons": {
     "16": "icons/icon16.png",
@@ -14,7 +14,8 @@
     "storage",
     "unlimitedStorage",
     "tabs",
-    "debugger"
+    "debugger",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"
